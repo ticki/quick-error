@@ -1,3 +1,6 @@
+#![feature(trace_macros)]
+#![feature(log_syntax)]
+
 //! A macro which makes errors easy to write
 //!
 //! Minimum type is like this:
@@ -260,10 +263,17 @@
 //!
 //!
 
-
 /// Main macro that does all the work
 #[macro_export]
 macro_rules! quick_error {
+    // Trailing commas
+    (   $(#[$meta:meta])*
+        pub enum $name:ident { $($chunks:tt,)* }
+    ) => {
+        quick_error!(SORT [pub enum $name $(#[$meta])* ]
+            items [] buf []
+            queue [ $($chunks)* ]);
+    };
     (   $(#[$meta:meta])*
         pub enum $name:ident { $($chunks:tt)* }
     ) => {
@@ -281,15 +291,16 @@ macro_rules! quick_error {
     // Queue is empty, can do the work
     (SORT [enum $name:ident $( #[$meta:meta] )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [ ]
         queue [ ]
     ) => {
+        log_syntax!("!!! 1 !!!");
         quick_error!(ENUM_DEFINITION [enum $name $( #[$meta] )*]
             body []
             queue [$($( #[$imeta] )*
-                      => $iitem: $imode [$( $ivar: $ityp ),*] )*]
+                      => $iitem: $imode [$( $(#[$attr])* $ivar: $ityp ),*] )*]
         );
         quick_error!(IMPLEMENTATIONS $name {$(
            $iitem: $imode [$( $ivar: $ityp ),*] {$( $ifuncs )*}
@@ -300,15 +311,16 @@ macro_rules! quick_error {
     };
     (SORT [pub enum $name:ident $( #[$meta:meta] )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [ ]
         queue [ ]
     ) => {
+        log_syntax!("!!! 2 !!!");
         quick_error!(ENUM_DEFINITION [pub enum $name $( #[$meta] )*]
             body []
             queue [$($( #[$imeta] )*
-                      => $iitem: $imode [$( $ivar: $ityp ),*] )*]
+                      => $iitem: $imode [$(#[$attr])* $( $ivar: $ityp ),*] )*]
         );
         quick_error!(IMPLEMENTATIONS $name {$(
            $iitem: $imode [$( $ivar: $ityp ),*] {$( $ifuncs )*}
@@ -320,44 +332,47 @@ macro_rules! quick_error {
     // Add meta to buffer
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*]
         queue [ #[$qmeta:meta] $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 3 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*]
             buf [$( #[$bmeta] )* #[$qmeta] ]
             queue [$( $tail )*]);
     };
     // Add ident to buffer
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $(#[$iattr:meta])* $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*]
         queue [ $qitem:ident $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 4 !!!");
         quick_error!(SORT [$( $def )*]
             items [$( $(#[$imeta])*
-                      => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*]
+                      => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*]
             buf [$(#[$bmeta])* => $qitem : UNIT [ ] ]
             queue [$( $tail )*]);
     };
     // Flush buffer on meta after ident
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*
             => $bitem:ident: $bmode:tt [$( $bvar:ident: $btyp:ty ),*] ]
         queue [ #[$qmeta:meta] $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 5 !!!");
         quick_error!(SORT [$( $def )*]
             enum [$( $(#[$emeta])* => $eitem $(( $($etyp),* ))* )*
                      $(#[$bmeta])* => $bitem: $bmode $(( $($btyp),* ))*]
             items [$($( #[$imeta:meta] )*
-                      => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*
+                      => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*
                      $bitem: $bmode [$( $bvar:$btyp ),*] {} ]
             buf [ #[$qmeta] ]
             queue [$( $tail )*]);
@@ -365,13 +380,14 @@ macro_rules! quick_error {
     // Add tuple enum-variant
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )* => $bitem:ident: UNIT [ ] ]
         queue [($( $qvar:ident: $qtyp:ty ),+) $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 6 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*]
             buf [$( #[$bmeta] )* => $bitem: TUPLE [$( $qvar:$qtyp ),*] ]
             queue [$( $tail )*]
         );
@@ -379,85 +395,90 @@ macro_rules! quick_error {
     // Add struct enum-variant - e.g. { descr: &'static str }
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )* => $bitem:ident: UNIT [ ] ]
         queue [{ $( $qvar:ident: $qtyp:ty ),+} $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 7 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*]
             buf [$( #[$bmeta] )* => $bitem: STRUCT [$( $qvar:$qtyp ),*] ]
             queue [$( $tail )*]);
     };
     // Add struct enum-variant, with excess comma - e.g. { descr: &'static str, }
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$attr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )* => $bitem:ident: UNIT [ ] ]
         queue [{$( $qvar:ident: $qtyp:ty ),+ ,} $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 8 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$attr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*]
             buf [$( #[$bmeta] )* => $bitem: STRUCT [$( $qvar:$qtyp ),*] ]
             queue [$( $tail )*]);
     };
     // Add braces and flush always on braces
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$iattr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*
-                 => $bitem:ident: $bmode:tt [$( $bvar:ident: $btyp:ty ),*] ]
+                 => $bitem:ident: $bmode:tt [$( #[$battr:meta] $bvar:ident: $btyp:ty ),*] ]
         queue [ {$( $qfuncs:tt )*} $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 9 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*
-                      $(#[$bmeta])* => $bitem: $bmode [$( $bvar:$btyp ),*] {$( $qfuncs )*} ]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$iattr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*
+                      $(#[$bmeta])* => $bitem: $bmode [$( #[$battr] $bvar:$btyp ),*] {$( $qfuncs )*} ]
             buf [ ]
             queue [$( $tail )*]);
     };
     // Flush buffer on double ident
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$iattr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*
-                 => $bitem:ident: $bmode:tt [$( $bvar:ident: $btyp:ty ),*] ]
+                 => $bitem:ident: $bmode:tt [$( #[$battr:meta] $bvar:ident: $btyp:ty ),*] ]
         queue [ $qitem:ident $( $tail:tt )*]
     ) => {
+        log_syntax!("!!! 10 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*
-                     $(#[$bmeta])* => $bitem: $bmode [$( $bvar:$btyp ),*] {} ]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$iattr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*
+                     $(#[$bmeta])* => $bitem: $bmode [$( #[$battr] $bvar:$btyp ),*] {} ]
             buf [ => $qitem : UNIT [ ] ]
             queue [$( $tail )*]);
     };
     // Flush buffer on end
     (SORT [$( $def:tt )*]
         items [$($( #[$imeta:meta] )*
-                  => $iitem:ident: $imode:tt [$( $ivar:ident: $ityp:ty ),*]
+                  => $iitem:ident: $imode:tt [$( $(#[$iattr:meta])* $ivar:ident: $ityp:ty ),*]
                                 {$( $ifuncs:tt )*} )* ]
         buf [$( #[$bmeta:meta] )*
-            => $bitem:ident: $bmode:tt [$( $bvar:ident: $btyp:ty ),*] ]
+            => $bitem:ident: $bmode:tt [$( #[$battr:meta] $bvar:ident: $btyp:ty ),*] ]
         queue [ ]
     ) => {
+        log_syntax!("!!! 11 !!!");
         quick_error!(SORT [$( $def )*]
-            items [$( $(#[$imeta])* => $iitem: $imode [$( $ivar:$ityp ),*] {$( $ifuncs )*} )*
-                     $(#[$bmeta])* => $bitem: $bmode [$( $bvar:$btyp ),*] {} ]
+            items [$( $(#[$imeta])* => $iitem: $imode [$( $(#[$iattr])* $ivar:$ityp ),*] {$( $ifuncs )*} )*
+                     $(#[$bmeta])* => $bitem: $bmode [$( #[$battr] $bvar:$btyp ),*] {} ]
             buf [ ]
             queue [ ]);
     };
     // Public enum (Queue Empty)
     (ENUM_DEFINITION [pub enum $name:ident $( #[$meta:meta] )*]
         body [$($( #[$imeta:meta] )*
-            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $svar:ident: $styp:ty ),*})*} )* ]
+            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$(  $(#[$sattr:meta])* $svar:ident: $styp:ty ),*})*} )* ]
         queue [ ]
     ) => {
         $(#[$meta])*
         pub enum $name {
             $(
                 $(#[$imeta])*
-                $iitem $(($( $ttyp ),*))* $({$( $svar: $styp ),*})*,
+                $iitem $(($( $ttyp ),*))* $({$( $(#[$sattr])* $svar: $styp ),*})*,
             )*
         }
     };
@@ -478,12 +499,12 @@ macro_rules! quick_error {
     // Unit variant
     (ENUM_DEFINITION [$( $def:tt )*]
         body [$($( #[$imeta:meta] )*
-            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $svar:ident: $styp:ty ),*})*} )* ]
+            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $(#[$sattr:meta])* $svar:ident: $styp:ty ),*})*} )* ]
         queue [$( #[$qmeta:meta] )*
             => $qitem:ident: UNIT [ ] $( $queue:tt )*]
     ) => {
         quick_error!(ENUM_DEFINITION [ $($def)* ]
-            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $svar: $styp ),*})*} )*
+            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $(#[$sattr])* $svar: $styp ),*})*} )*
                     $( #[$qmeta] )* => $qitem () {} ]
             queue [ $($queue)* ]
         );
@@ -491,12 +512,12 @@ macro_rules! quick_error {
     // Tuple variant
     (ENUM_DEFINITION [$( $def:tt )*]
         body [$($( #[$imeta:meta] )*
-            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $svar:ident: $styp:ty ),*})*} )* ]
+            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $(#[$sattr:meta])* $svar:ident: $styp:ty ),*})*} )* ]
         queue [$( #[$qmeta:meta] )*
             => $qitem:ident: TUPLE [$( $qvar:ident: $qtyp:ty ),+] $( $queue:tt )*]
     ) => {
         quick_error!(ENUM_DEFINITION [ $($def)* ]
-            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $svar: $styp ),*})*} )*
+            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $(#[$sattr])* $svar: $styp ),*})*} )*
                     $( #[$qmeta] )* => $qitem (($( $qtyp ),*)) {} ]
             queue [ $($queue)* ]
         );
@@ -504,12 +525,12 @@ macro_rules! quick_error {
     // Struct variant
     (ENUM_DEFINITION [$( $def:tt )*]
         body [$($( #[$imeta:meta] )*
-            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $svar:ident: $styp:ty ),*})*} )* ]
+            => $iitem:ident ($(($( $ttyp:ty ),+))*) {$({$( $(#[$sattr:meta])* $svar:ident: $styp:ty ),*})*} )* ]
         queue [$( #[$qmeta:meta] )*
             => $qitem:ident: STRUCT [$( $qvar:ident: $qtyp:ty ),*] $( $queue:tt )*]
     ) => {
         quick_error!(ENUM_DEFINITION [ $($def)* ]
-            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $svar: $styp ),*})*} )*
+            body [$($( #[$imeta] )* => $iitem ($(($( $ttyp ),+))*) {$({$( $(#[$sattr])* $svar: $styp ),*})*} )*
                     $( #[$qmeta] )* => $qitem () {{$( $qvar: $qtyp ),*}} ]
             queue [ $($queue)* ]
         );
@@ -898,6 +919,25 @@ mod test {
         #[derive(Debug)]
         pub enum Bare {
             One
+            Two
+        }
+    }
+    quick_error! {
+        #[derive(Debug)]
+        pub enum Bare2 {
+            One,
+            Two,
+        }
+    }
+    quick_error! {
+        #[derive(Debug)]
+        pub enum Bare1 {
+            One {
+                /// a
+                a: usize,
+            } {
+                desc("yeah")
+            },
             Two
         }
     }
